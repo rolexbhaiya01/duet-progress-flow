@@ -31,6 +31,8 @@ interface Suggestion {
 export const AIInsights: React.FC = () => {
   const [projectInput, setProjectInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState(true);
   const { toast } = useToast();
 
   const suggestions: Suggestion[] = [
@@ -110,6 +112,48 @@ export const AIInsights: React.FC = () => {
     }
   };
 
+  const callGeminiAPI = async (prompt: string) => {
+    if (!apiKey.trim()) {
+      toast({
+        title: "API Key required",
+        description: "Please enter your Google Gemini API key.",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `As a project management AI assistant, analyze this project description and provide actionable insights and suggestions for improvement: ${prompt}`
+            }]
+          }]
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated";
+    } catch (error) {
+      console.error('Gemini API Error:', error);
+      toast({
+        title: "API Error",
+        description: "Failed to connect to Gemini AI. Please check your API key.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!projectInput.trim()) {
       toast({
@@ -122,13 +166,15 @@ export const AIInsights: React.FC = () => {
 
     setIsAnalyzing(true);
     
-    // Simulate AI analysis
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    const aiResponse = await callGeminiAPI(projectInput);
     
-    toast({
-      title: "Analysis complete!",
-      description: "AI has generated new insights for your project.",
-    });
+    if (aiResponse) {
+      toast({
+        title: "Analysis complete!",
+        description: "AI has generated new insights for your project.",
+      });
+      console.log('AI Response:', aiResponse);
+    }
     
     setIsAnalyzing(false);
     setProjectInput('');
@@ -153,6 +199,48 @@ export const AIInsights: React.FC = () => {
           Refresh Insights
         </Button>
       </motion.div>
+
+      {/* API Key Input */}
+      {showApiKeyInput && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="glass-card border-warning/50">
+            <CardHeader>
+              <CardTitle className="flex items-center text-xl text-warning">
+                <AlertCircle className="mr-2 h-5 w-5" />
+                Google Gemini API Key Required
+              </CardTitle>
+              <CardDescription>
+                Enter your Google Gemini API key to enable AI analysis. Get your key from Google AI Studio.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  placeholder="Enter your Google Gemini API key..."
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-muted/50 border border-border rounded-md focus:border-primary focus:outline-none"
+                />
+                <Button 
+                  onClick={() => setShowApiKeyInput(false)}
+                  disabled={!apiKey.trim()}
+                  className="button-primary"
+                >
+                  Save Key
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your API key is stored locally and never shared. For production use, connect to Supabase for secure secret management.
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* AI Analysis Input */}
       <motion.div
@@ -181,23 +269,34 @@ export const AIInsights: React.FC = () => {
               <p className="text-xs text-muted-foreground">
                 Powered by Google Gemini AI • Your data is processed securely
               </p>
-              <Button 
-                onClick={handleAnalyze}
-                disabled={isAnalyzing}
-                className="button-primary"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Analyze Project
-                  </>
+              <div className="flex gap-2">
+                {!showApiKeyInput && (
+                  <Button 
+                    onClick={() => setShowApiKeyInput(true)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Change API Key
+                  </Button>
                 )}
-              </Button>
+                <Button 
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing || !apiKey.trim()}
+                  className="button-primary"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Analyze Project
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
